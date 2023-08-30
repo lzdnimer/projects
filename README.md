@@ -3,7 +3,7 @@ A collection of my data-related projects, primarily focusing on R to create data
 
 Teaching myself (or getting StackOverflow & ChatGPT to teach me) R, Python, and Looker.
 
-## About me
+## about me
 I'm a consultant working for a firm that focuses on helping banks avoid being fined by reviewing their Transaction Monitoring systems to see if:
 * Their data flows correctly from point A to B
 * There are data quality issues
