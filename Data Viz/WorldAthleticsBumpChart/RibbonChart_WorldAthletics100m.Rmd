@@ -1,0 +1,141 @@
+---
+title: "BumpChart_WorldAthletics100m"
+author: "Nimer, Lazaro"
+date: "2023-08-26"
+output: html_document
+---
+
+## Installing initial packages and retrieving data
+
+```{r}
+# Pacman is a package which makes it easier to install and load other packages
+
+install.packages("pacman")
+pacman::p_load('tidyverse', 'ggbump', 'patchwork', 'dplyr')
+```
+
+```{r}
+# using readr::readcsv to take the csv data from my github repo, piping (%>%) the imported data through janitor to clean the column names. This part isn't necessary in this case as the columns aren't complex but this is good practice
+
+sprints <- readr::read_csv('https://raw.githubusercontent.com/lzdnimer/worldath_mens100/312a007e07871170d5878599876a774d2578d0f7/RibbonChart_WorldAthletics100M.csv', show_col_types = FALSE) %>% janitor::clean_names()
+```
+
+```{r}
+# transposing the data, formatting it as a data frame, then using the janitor package to take the first row with interval splits and turn them into the header
+sprints_t <- sprints %>% t %>% as.data.frame() %>% janitor::row_to_names(1)
+
+# adding precision to the final times so we can rank them later, and formatting the numbers from character to numeric class
+sprints_t[2,10] <- 9.873
+sprints_t[3,10] <- 9.874
+sprints_t[4,10] <- 9.877
+sprints_t_num <- as.data.frame(apply(sprints_t, 2, as.numeric))
+
+# now that we have the formatted times, I'm re-adding the names of the athletes. "0-1m" is a dummy column - I need to use it to make more space for the labels after using coord_cartesian()
+sprints_bump <- sprints_t_num %>% 
+  mutate(athletes = c("Lyles (USA)", "Tebogo (BOT)", "Hughes (GBR)", "Seville (JAM)", "Coleman (USA)"), .before = 1, "0-1m" = c(1.93,1.87,1.96,1.92,1.89))
+  
+# pivoting the data so that I can plot the segments on the x-axis, grouping by each segment, ranking by descending time (rather than ascending to avoid the need to reverse the y-axis).
+# segnum will be used for the x-axis. Using the actual segments (i.e., discrete values) did not work with cartesian_coord().
+
+sprints_bump_long <- sprints_bump %>% 
+  pivot_longer(!athletes, names_to = "Segment", values_to = "Time") %>%
+  group_by(Segment) %>%
+  mutate(Rank = row_number(-Time),
+          segnum = case_when(
+   Segment ==  "0-1m" ~ 1,
+   Segment ==  "0-10m" ~ 2,
+   Segment ==  "10-20m" ~ 3,
+   Segment == "20-30m" ~ 4,
+   Segment ==  "30-40m" ~ 5,
+   Segment ==  "40-50m" ~ 6,
+   Segment ==  "50-60m" ~ 7,
+   Segment ==  "60-70m" ~ 8,
+   Segment ==  "70-80m" ~ 9,
+   Segment ==  "80-90m" ~ 10,
+   Segment ==  "90-100m" ~ 11
+  )) %>%
+  ungroup() %>%
+  arrange(segnum, Rank)
+
+sprints_bump_long
+```
+
+## Assign colour palette
+
+```{r}
+# Used viridisLite to get a colourblind-friendly colour palette
+
+colour_palette <- viridisLite::mako(6)
+description_colour <- 'grey40'
+athlete_colours <- c(
+  "Lyles (USA)" = colour_palette[2],
+  "Tebogo (BOT)" = colour_palette[3],
+   "Hughes (GBR)" = colour_palette[4],
+   "Seville (JAM)" = colour_palette[5],
+   "Coleman (USA)" = colour_palette[1])
+
+```
+
+![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAaCAYAAADFTB7LAAAAa0lEQVR42u3OywnAIBBAwcXSUoCW5D11xDoNCBGNv0MOecJOBSOi1OZMsJ4dvFxEJ1OQnMxBarIKEpNNkJbsBknJYZCSnAYJyVVQziNig7/nZkFEbhTE5HpBVO4dxOXKIDL3BLG5BJ1T6rsbMfep2CaMN00AAAAASUVORK5CYII= "Run Current Chunk")
+
+## Build bump plot
+
+```{r}
+
+#building the bump plot.
+
+bump_chart_basic_100 <- sprints_bump_long %>% filter(segnum > 1) %>% 
+  ggplot(aes(segnum, Rank, col = athletes, group = athletes)) + 
+  geom_bump(linewidth = 1) +
+  geom_point(shape = '|', stroke = 6) +
+  geom_text(
+    data = sprints_bump_long %>% filter(Segment == "0-10m"),
+    aes(label = athletes),
+    hjust = 1,
+    nudge_x = -0.08,
+    size = 3.8,
+    fontface = 'bold',
+  ) +
+  geom_text(
+    data = sprints_bump_long %>% filter(Segment == "90-100m"),
+    aes(label = c(5,4,3,2,1)),
+    hjust = 1,
+    nudge_x = 0.5,
+    size = 5,
+    fontface = 'bold'
+  ) +
+  scale_colour_manual(values = athlete_colours) +
+  scale_x_continuous(breaks = 1:11, labels = c("-", "0-10", "10-20", "20-30", "30-40", "40-50", "50-60", "60-70", "70-80", "80-90", "90-100")) +
+  scale_y_reverse(limits = c(5.5, 0), expand = c(0,0)) +
+  theme_minimal() +
+  coord_cartesian(xlim = c(0,12), ylim = c(0.5, 5.5), expand = T) + #this allows me to zoom 'out' by setting x and y limits outside the actual boundaries of the graph
+  theme(plot.margin = margin(t = 10, r = 10, b = 10, l = 10, unit = "pt")) +
+  theme (
+    legend.position = 'none',
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y.right = element_blank(),
+    axis.text.y.left = element_blank(),
+    plot.background = element_rect(fill = NA , colour = NA),
+    text = element_text(
+      colour = description_colour,
+      family = 'Merriweather'
+    ),
+    plot.subtitle = element_text(
+      margin = margin(t = 2, b = 2, unit = 'mm')
+    ),
+    plot.title = element_text(
+      face = 'bold',
+      size = 20
+    )
+  ) +
+  labs(
+    title = "World Athletics Budapest 2023",
+    subtitle = "Top five in 100m Men's Final. Ranked per 10m segment") +
+  xlab("Segment (Metres)")
+
+bump_chart_basic_100
+```
