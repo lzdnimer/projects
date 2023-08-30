@@ -10,3 +10,5 @@ I'm a consultant working for a firm that focuses on helping banks avoid being fi
 * The logic they use in detecting suspicious and possibly criminal behaviour works.
 
 I use SQL for 90% of the work carried out. Now I'm learning Python and R to hopefully incorporate them into my work and speed up processes.
+
+Get in touch if you have feedback!
