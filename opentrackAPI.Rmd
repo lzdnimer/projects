@@ -1,0 +1,133 @@
+---
+title: "APIs and R"
+author: "Lazaro Nimer"
+date: "2023-09-21"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+  pdf_document: default
+---
+
+## API's and R
+
+This is a quick guide on accessing an API ("Application Programming Interface") to retrieve data from a website. In this example, I'm getting data from [OpenTrack](https://data.opentrack.run/en-gb/x/2023/GBR/tracksmith5k2/event/T1/1/1/), a website which has the results of a recent 5K I took part in.
+
+In most instances, data can be downloaded directly from websites. However, OpenTrack doesn't provide this feature. Instead, they allow for individuals to access data directly from the website using an API - think of API's as a way to 'talk' to the website and request data.
+
+There are several ways of using an API; R is a great way to do this as there are plenty of guides available and packages exist to make the process a lot easier.
+
+### Notes
+
+-   [Dean Chereden's video](https://www.youtube.com/watch?v=AhZ42vSmDmE&pp=ygUTZGVhbiBjaGVyZWRlbiByIGFwaQ%3D%3D) on API's serves as a great tutorial on accessing API's with R - plus using R in general. Give it a watch!
+-   If you have any questions or feedback, please message me on [LinkedIn](https://www.linkedin.com/in/lazaronimer1798/).
+-   I used the data from OpenTrack to make a dashboard visualising race results. This is all in my [Github repo](https://github.com/lzdnimer/projects).
+
+## Packages
+
+The first step is to download and install the prerequisite packages: httr, jsonlite, dplyr.
+
+In general, I use [pacman()](https://www.rdocumentation.org/packages/pacman/versions/0.5.1) to install packages as the code is simpler and it skips packages that are already installed in your environment.
+
+```{r warning=FALSE, message=FALSE}
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+install.packages("pacman")
+library(pacman)
+```
+
+Once you install pacman(), you can install the packages above:
+
+```{r}
+p_load(httr, jsonlite, dplyr)
+```
+
+A quick note on the packages we've installed:
+
+-   httr: allows us to work with HTTP (i.e., the website we're requesting data from)
+-   jsonlite: parses JSON data
+-   dplyr: helps us manipulate the data
+
+## Retrieving Data via API
+
+```{r warning = FALSE, message = FALSE}
+track_response <- list() # create an empty list to populate the data in
+
+for (i in 1:9) { # loop function to iterate through each page of results
+  url <- paste0("https://data.opentrack.run/en-gb/x/2023/GBR/tracksmith5k2/event/T1/1/", i, "/json/")
+  response <- httr::GET(url) # gets the URL
+  loop_JSON <- fromJSON(content(response, as = "text")) # extracts the content from the url which is in JSON format
+  track_response[[i]] <- loop_JSON$results # stores the results of each heat in the list we created earlier
+}
+```
+
+### Code Breakdown
+
+1.  `track_response <- list()`: This line creates an empty list called "track_response." Think of a list like a container where we can store different pieces of information.
+
+2.  `for (i in 1:9) {}`: This line sets up a loop that will run nine times, and each time it runs, it will perform the following actions. I did this because there are nine heats in the race, and the results of each race was stored in a different page. Hypothetically, if there were 15 heats, the `for` loop would be `for (i in 1:15)`.
+
+3.  `url <- paste0("https://data.opentrack.run/en-gb/x/2023/GBR/tracksmith5k2/event/T1/1/", i, "/json/")`: Inside the loop, this line creates a web address (URL) by combining several parts together, like constructing a unique web link for each iteration of the loop. Remember, the `i` is replaced by the numbers 1-9 each time.
+
+4.  `response <- httr::GET(url)`: This line uses a tool called "httr" to send a request to the web address (URL) we just created. It's like asking the internet for some information.
+
+5.  `loop_JSON <- fromJSON(content(response, as = "text"))`: Here, we take the response we got from OpenTrack, and we convert it into a format that's easier for us to work with.
+
+6.  `track_response[[i]] <- loop_JSON$results`: We then take the information we got from the internet (in step 5) and store it in our empty list (created in step 1). Think of it like putting the translated information into our container (the list).
+
+7.  `cat("API request", i, "completed. \n")`: Lastly, we print a message to let us know that one round of asking the internet for information is finished. It's like getting a progress report saying, "We're done with request number 1, 2, 3, and so on."
+
+So, in summary, this code: \* sets up a process to repeatedly ask a website for information, \* translates that information into a format we can understand, and \* stores it in a list while keeping us updated on the progress of each request.
+
+It's like sending multiple requests to a library, getting books in a different language, translating them, and putting them on a shelf with labels to keep track of everything.
+
+## Cleaning the Data
+
+### Does it look right?
+
+Before we begin to visualise the data, it's good practice to review the data. Does it look right? Are you missing key values? Do you need to format certain columns? Do you need to drop other columns?
+
+```{r}
+View(track_response[[1]])
+```
+
+You'll see that track_response is a list containing 9 data frames, with each data frame corresponding to the heat. In each data frame, you can see data on each athlete: name, gender, performance, etc. Now that we've checked the data is as we expected, we can start with combining all nine data frames into one:
+
+```{r}
+combined_track_response <- do.call(rbind, track_response)
+```
+
+We now have all results stored in one data frame. I noticed a few empty columns, so I removed them:
+
+```{r}
+empty_columns <- sapply(combined_track_response, function(x) all(is.na(x) | x == ""))
+noblank_ctr <- combined_track_response[, !empty_columns]
+```
+
+Let's remove anyone that Did Not Start (DNS), Did Not Finish (DNF), or has a blank performance, and then store that as `active_runners`:
+
+```{r}
+active_runners <- noblank_ctr %>% filter(
+  noblank_ctr$performance != "DNS" &
+  noblank_ctr$performance != "" &
+  noblank_ctr$performance != "DNF"
+)
+```
+
+Finally, we'll combine each athlete's first name and surname to create a combined name, and then add a column indicating which heat each athlete raced in:
+
+```{r}
+active_runners$full_name <- # The '$' operator lets us specify a column/make a new one
+  paste(active_runners$first_name, active_runners$last_name) # concatenating the two columns
+active_runners$heat <- 
+  cumsum(active_runners$place == 1) # Starting at 1, this value goes up each time a runner finishes 1st - indicating that the next group of athletes should be placed in a separate heat
+```
+
+## Summary
+
+This guide went over:
+
+-   Using R to accessing data on a webpage via API,
+-   The use of for{} loops to iterate through different pages, and
+-   Cleaning and manipulating data so it's ready for visualisation.
+
+Thanks for reading; if you found this useful, let me know :)
